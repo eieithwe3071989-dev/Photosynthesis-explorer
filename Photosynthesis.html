@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Photosynthesis Explorer</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React and ReactDOM CDNs -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <!-- Babel Standalone CDN to compile JSX in browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useEffect, useMemo, useState } = React;
+
+    // Helper Component to render Lucide Icons dynamically in vanilla React/CDN
+    const LucideIcon = ({ name, size = 20, className = "" }) => {
+      const ref = React.useRef(null);
+
+      useEffect(() => {
+        if (ref.current) {
+          ref.current.innerHTML = `<i data-lucide="${name}" class="${className}" style="width: ${size}px; height: ${size}px; display: inline-block;"></i>`;
+          if (window.lucide) {
+            window.lucide.createIcons({
+              attrs: {
+                'stroke-width': 2
+              },
+              nameAttr: 'data-lucide'
+            });
+          }
+        }
+      }, [name, size, className]);
+
+      return <span ref={ref} className="inline-flex items-center justify-center" />;
+    };
+
+    function PhotosynthesisExplorer() {
+      const [tab, setTab] = useState("Home");
+      const [difficulty, setDifficulty] = useState("Intermediate");
+      const [contrast, setContrast] = useState(false);
+      const [fontSize, setFontSize] = useState("base");
+      const [language, setLanguage] = useState("English");
+      const [profileOpen, setProfileOpen] = useState(false);
+      const [mobileNav, setMobileNav] = useState(false);
+      const [modal, setModal] = useState(null);
+      const [completed, setCompleted] = useState(new Set());
+      const [lab, setLab] = useState({ light: 65, co2: 55, water: 75, temp: 25 });
+      const [experiment, setExperiment] = useState({ running: false, seconds: 0, bubbles: 0, distance: "Medium", booster: false });
+      const [experimentRows, setExperimentRows] = useState([]);
+      const [quizIndex, setQuizIndex] = useState(0);
+      const [quizAnswer, setQuizAnswer] = useState(null);
+      const [quizScore, setQuizScore] = useState(0);
+      const [quizSubmitted, setQuizSubmitted] = useState(false);
+      const [misconception, setMisconception] = useState(0);
+      const [misconceptionAnswer, setMisconceptionAnswer] = useState(null);
+      const [tutorStep, setTutorStep] = useState(0);
+      const [greenhouse, setGreenhouse] = useState({ light: 1, water: 1, co2: 0, temp: 0 });
+      const [cycleStage, setCycleStage] = useState(0);
+      const [toast, setToast] = useState("");
+
+      const tabs = ["Home", "Learn", "Explore", "Lab", "Experiments", "Tutor", "Challenge", "Assessment", "Progress"];
+      const labels = {
+        English: { start: "Start Learning Journey", lab: "Enter Virtual Lab", progress: "Overall Progress" },
+        Tamil: { start: "கற்றல் பயணத்தைத் தொடங்குங்கள்", lab: "மெய்நிகர் ஆய்வகத்திற்குச் செல்லுங்கள்", progress: "மொத்த முன்னேற்றம்" },
+        Hindi: { start: "सीखने की यात्रा शुरू करें", lab: "वर्चुअल लैब में जाएँ", progress: "कुल प्रगति" },
+        Malayalam: { start: "പഠന യാത്ര ആരംഭിക്കുക", lab: "വെർച്വൽ ലാബിലേക്ക് പോകുക", progress: "മൊത്തം പുരോഗതി" },
+        Telugu: { start: "అభ్యాస ప్రయాణాన్ని ప్రారంభించండి", lab: "వర్చువల్ ల్యాబ్‌కి వెళ్లండి", progress: "మొత్తం పురోగతి" }
+      }[language];
+
+      const completedCount = completed.size;
+      const progress = Math.min(100, Math.round((completedCount / 12) * 100));
+
+      const markDone = (id) => {
+        setCompleted(prev => new Set([...prev, id]));
+        setToast("Progress updated ✓");
+        setTimeout(() => setToast(""), 1600);
+      };
+
+      const labRate = useMemo(() => {
+        const lightFactor = lab.light / 100;
+        const co2Factor = lab.co2 / 100;
+        const waterFactor = lab.water / 100;
+        const tempFactor = Math.max(0, 1 - Math.abs(lab.temp - 25) / 30);
+        return Math.round(100 * Math.min(lightFactor, co2Factor, waterFactor, tempFactor));
+      }, [lab]);
+
+      const plantHealth = Math.round(
+        (lab.water * 0.3) + (lab.light * 0.25) + (lab.co2 * 0.2) +
+        (Math.max(0, 100 - Math.abs(lab.temp - 25) * 4) * 0.25)
+      );
+
+      useEffect(() => {
+        if (!experiment.running) return;
+        const id = setInterval(() => {
+          setExperiment(prev => {
+            const distanceFactor = { Bright: 1.5, Medium: 1, Low: 0.45, Dark: 0.05 }[prev.distance];
+            const booster = prev.booster ? 1.25 : 1;
+            const newBubbles = prev.bubbles + Math.max(0, Math.round(distanceFactor * booster));
+            return { ...prev, seconds: prev.seconds + 1, bubbles: newBubbles };
+          });
+        }, 1000);
+        return () => clearInterval(id);
+      }, [experiment.running]);
+
+      const questions = [
+        {
+          q: "Which gas is a raw material used during photosynthesis?",
+          options: ["Oxygen", "Carbon dioxide", "Nitrogen", "Hydrogen"],
+          answer: 1,
+          why: "Carbon dioxide enters the leaf through stomata and is used to build sugars."
+        },
+        {
+          q: "What is the main role of chlorophyll?",
+          options: ["Absorb light energy", "Absorb minerals", "Make roots grow", "Store water"],
+          answer: 0,
+          why: "Chlorophyll absorbs light energy that drives photosynthesis."
+        },
+        {
+          q: "If light intensity becomes very low, what generally happens?",
+          options: ["Photosynthesis speeds up", "Photosynthesis slows down", "Water becomes glucose", "Oxygen becomes carbon dioxide"],
+          answer: 1,
+          why: "Light supplies energy for photosynthesis, so insufficient light can limit the process."
+        },
+        {
+          q: "Why are stomata important?",
+          options: ["They pump sugar into roots", "They allow gas exchange", "They make chlorophyll", "They produce sunlight"],
+          answer: 1,
+          why: "Stomata are openings that regulate movement of gases such as carbon dioxide and oxygen."
+        }
+      ];
+
+      const myths = [
+        ["Plants get their food from soil.", false, "Plants take up water and minerals from soil, but they manufacture glucose through photosynthesis."],
+        ["Plants can respire during both day and night.", true, "Respiration occurs continuously; photosynthesis depends on light."],
+        ["Oxygen is the food made by plants.", false, "Oxygen is released during photosynthesis. Glucose is a sugar produced by the process."],
+        ["Plants need carbon dioxide for photosynthesis.", true, "Carbon dioxide supplies carbon that becomes part of carbohydrate molecules."]
+      ];
+
+      const hotspots = {
+        "Upper Epidermis": "Protective outer layer that helps reduce damage and water loss.",
+        "Lower Epidermis": "Protective layer containing many stomata in typical leaves.",
+        "Stomata": "Tiny openings that allow gas exchange between the leaf and the air.",
+        "Guard Cells": "Cells surrounding a stoma that help control whether it is open or closed.",
+        "Palisade Mesophyll": "Cells rich in chloroplasts where much photosynthesis occurs.",
+        "Spongy Mesophyll": "Loosely arranged cells with air spaces that help gases move through the leaf.",
+        "Xylem": "Transports water and minerals from roots toward the leaves.",
+        "Phloem": "Transports sugars made by the plant to other parts."
+      };
+
+      const cycle = [
+        ["Carbon Fixation", "CO₂ is incorporated into carbon compounds."],
+        ["Reduction", "Energy from ATP and NADPH helps form higher-energy carbon compounds."],
+        ["G3P Production", "G3P is a sugar building block that can contribute to carbohydrate formation."],
+        ["RuBP Regeneration", "Some carbon compounds are rearranged so the cycle can continue."]
+      ];
+
+      const greenhouseScore = useMemo(() => {
+        const base = 35 + greenhouse.light * 15 + greenhouse.water * 12 + greenhouse.co2 * 10;
+        const tempPenalty = greenhouse.temp === 1 ? 5 : 0;
+        return Math.min(100, base - tempPenalty);
+      }, [greenhouse]);
+
+      const fontClass = fontSize === "small" ? "text-[13px]" : fontSize === "large" ? "text-[17px]" : "text-[15px]";
+
+      const go = (next) => {
+        setTab(next);
+        setMobileNav(false);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      };
+
+      const explainLab = () => {
+        const limiting = [
+          ["light", lab.light], ["CO₂", lab.co2], ["water", lab.water]
+        ].sort((a,b) => a[1]-b[1])[0][0];
+        let message = `Your current photosynthesis activity is about ${labRate}%. `;
+        if (labRate > 75) message += "The plant has a fairly balanced set of conditions.";
+        else if (limiting === "light") message += "Light is the strongest limiting factor in this setup.";
+        else if (limiting === "CO₂") message += "Carbon dioxide availability is the strongest limiting factor.";
+        else message += "Water availability is the strongest limiting factor.";
+        if (lab.temp > 40) message += " The high temperature also makes the conditions less favorable.";
+        setModal({ title: "🧠 What happened?", body: message });
+      };
+
+      const submitQuiz = () => {
+        if (quizAnswer === null) return;
+        setQuizSubmitted(true);
+        if (quizAnswer === questions[quizIndex].answer) {
+          setQuizScore(s => s + 1);
+          markDone(`quiz-${quizIndex}`);
+        }
+      };
+
+      const nextQuiz = () => {
+        setQuizSubmitted(false);
+        setQuizAnswer(null);
+        setQuizIndex((quizIndex + 1) % questions.length);
+      };
+
+      const submitExperimentRow = () => {
+        const observation = experiment.bubbles > 0 ? "Oxygen bubbles observed" : "Few/no bubbles";
+        setExperimentRows(rows => [...rows, {
+          condition: `${experiment.distance}${experiment.booster ? " + CO₂" : ""}`,
+          time: `${experiment.seconds}s`,
+          bubbles: experiment.bubbles,
+          observation
+        }]);
+        markDone("experiment");
+      };
+
+      const downloadCSV = () => {
+        const rows = [
+          ["Student Identifier", "Pre-test", "Post-test", "Mastery", "Experiment", "Assessment"],
+          ["Student-01", "42", String(42 + quizScore * 12), progress > 70 ? "Mastered" : "Developing", experimentRows.length ? "Completed" : "Not completed", `${quizScore}/${questions.length}`]
+        ];
+        const csv = rows.map(r => r.map(x => `"${String(x).replaceAll('"','""')}"`).join(",")).join("\n");
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "photosynthesis-class-summary.csv"; a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const Card = ({ children, className = "", onClick }) => (
+        <div onClick={onClick} className={`rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:shadow-xl ${onClick ? "cursor-pointer" : ""} ${className}`}>
+          {children}
+        </div>
+      );
+
+      const SectionTitle = ({ icon, eyebrow, title, description }) => (
+        <div className="mb-6">
+          <div className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-emerald-700">
+            <LucideIcon name={icon} size={17} /> {eyebrow}
+          </div>
+          <h2 className="text-2xl font-black tracking-tight text-slate-900 md:text-3xl">{title}</h2>
+          {description && <p className="mt-2 max-w-3xl text-slate-600">{description}</p>}
+        </div>
+      );
+
+      const Slider = ({ label, value, setValue, icon, unit = "" }) => (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="flex items-center gap-2 font-semibold text-slate-800"><LucideIcon name={icon} size={17} />{label}</span>
+            <span className="rounded-lg bg-white px-2 py-1 text-sm font-bold text-emerald-700">{value}{unit}</span>
+          </div>
+          <input aria-label={label} type="range" min="0" max="100" value={value} onChange={e => setValue(+e.target.value)} className="w-full accent-emerald-600" />
+        </div>
+      );
+
+      const Home = () => (
+        <div className="space-y-8">
+          <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-950 via-emerald-800 to-sky-800 p-7 text-white shadow-xl md:p-10">
+            <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-amber-400/20 blur-2xl" />
+            <div className="relative grid items-center gap-8 md:grid-cols-[1.25fr_.75fr]">
+              <div>
+                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-sm backdrop-blur">
+                  <LucideIcon name="sparkles" size={15} /> Interactive School Science Laboratory
+                </div>
+                <h1 className="text-4xl font-black tracking-tight md:text-6xl">Photosynthesis<br /><span className="text-amber-300">Explorer</span></h1>
+                <p className="mt-5 max-w-2xl text-lg leading-8 text-emerald-50">
+                  Discover how plants transform light energy into chemical energy through interactive models, experiments, challenges, and guided reasoning.
+                </p>
+                <div className="mt-7 flex flex-wrap gap-3">
+                  <button onClick={() => { markDone("hero"); go("Learn"); }} className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 font-bold text-emerald-900 shadow-lg hover:bg-emerald-50">{labels.start} <LucideIcon name="arrow-right" size={18}/></button>
+                  <button onClick={() => go("Lab")} className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-5 py-3 font-bold backdrop-blur hover:bg-white/20">{labels.lab} <LucideIcon name="flask-conical" size={18}/></button>
+                </div>
+              </div>
+              <div className="flex justify-center">
+                <div className="relative flex h-64 w-64 items-end justify-center">
+                  <div className="absolute bottom-0 h-28 w-3 rounded-full bg-amber-700/80" />
+                  <div className="absolute bottom-20 h-20 w-20 rounded-[100%_0_100%_0] bg-emerald-400 shadow-lg rotate-[-18deg]" />
+                  <div className="absolute bottom-28 ml-24 h-16 w-16 rounded-[0_100%_0_100%] bg-lime-300 rotate-12" />
+                  <div className="absolute bottom-36 mr-20 h-14 w-14 rounded-[100%_0_100%_0] bg-emerald-300 rotate-[-40deg]" />
+                  <div className="absolute bottom-0 h-10 w-40 rounded-full bg-black/20 blur-xl" />
+                  <div className="absolute right-3 top-4 flex h-20 w-20 items-center justify-center rounded-full bg-amber-300 text-amber-950 shadow-xl"><LucideIcon name="sun" size={38}/></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div className="grid gap-4 md:grid-cols-4">
+            {[
+              ["book-open", "Learn", "Build the core idea", "Learn"],
+              ["microscope", "Explore", "Open leaf & chloroplast diagrams", "Explore"],
+              ["beaker", "Experiment", "Investigate oxygen bubbles", "Experiments"],
+              ["brain", "Think", "Practice with adaptive questions", "Assessment"]
+            ].map(([icon, title, text, target]) => (
+              <Card key={title} onClick={() => go(target)} className="p-5">
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><LucideIcon name={icon} size={22}/></div>
+                <h3 className="font-black text-slate-900">{title}</h3>
+                <p className="mt-1 text-sm text-slate-600">{text}</p>
+              </Card>
+            ))}
+          </div>
+
+          <Card className="overflow-hidden">
+            <div className="grid md:grid-cols-3">
+              <div className="p-6 md:col-span-2">
+                <SectionTitle icon="leaf" eyebrow="Your Journey" title="Learn by making predictions" description="The experience follows a simple scientific cycle: learn, predict, experiment, observe, explain, and reflect." />
+                <div className="flex flex-wrap gap-2">
+                  {["Learn", "Explore", "Predict", "Experiment", "Observe", "Explain", "Practice", "Assess"].map((x,i) =>
+                    <span key={x} className={`rounded-full px-3 py-1.5 text-sm font-semibold ${i < Math.ceil(progress/12.5) ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"}`}>{x}</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-center bg-slate-50 p-6">
+                <div className="text-center">
+                  <div className="text-5xl font-black text-emerald-700">{progress}%</div>
+                  <div className="mt-1 text-sm font-semibold text-slate-500">{labels.progress}</div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      );
+
+      const Learn = () => {
+        const inputs = [
+          ["sun", "Sunlight", "Energy source", "Light energy powers the reactions.", "amber"],
+          ["droplets", "Water", "Raw material", "Water is used in photosynthesis and supplies hydrogen/electrons in the light reactions.", "sky"],
+          ["wind", "Carbon dioxide", "Raw material", "CO₂ supplies carbon that becomes part of carbohydrate molecules.", "slate"],
+          ["leaf", "Chlorophyll", "Light absorber", "The green pigment absorbs useful wavelengths of light.", "emerald"]
+        ];
+        return <div className="space-y-8">
+          <SectionTitle icon="book-open" eyebrow="Module 1 · Learn" title="How does a plant make its own food?" description="Build the big picture first. Select a card to explore its role." />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {inputs.map(([icon, name, role, body]) => (
+              <Card key={name} onClick={() => setModal({title:name, body:`${role}. ${body}`})} className="p-5">
+                <div className="flex items-center justify-between"><LucideIcon name={icon} className="text-emerald-600" size={27}/><span className="text-xs font-bold uppercase tracking-wide text-slate-400">{role}</span></div>
+                <h3 className="mt-4 font-black text-slate-900">{name}</h3>
+                <p className="mt-1 text-sm text-slate-600">{body}</p>
+              </Card>
+            ))}
+          </div>
+          <Card className="p-6 md:p-8">
+            <div className="mb-6 flex items-center justify-between">
+              <div><h3 className="text-xl font-black">The photosynthesis equation</h3><p className="text-sm text-slate-500">Watch the inputs become products.</p></div>
+              <button onClick={() => markDone("equation")} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white">I understand</button>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-3 text-center">
+              {["6CO₂", "+", "6H₂O", "+", "Light Energy"].map((x,i) => <span key={i} className="rounded-xl bg-sky-50 px-4 py-3 font-black text-sky-800">{x}</span>)}
+              <LucideIcon name="arrow-right" className="text-amber-500" />
+              {["C₆H₁₂O₆", "+", "6O₂"].map((x,i) => <span key={i} className="rounded-xl bg-emerald-50 px-4 py-3 font-black text-emerald-800">{x}</span>)}
+            </div>
+            <div className="mt-6 rounded-xl bg-slate-50 p-4 text-center font-semibold text-slate-700">
+              {difficulty === "Beginner" ? "Carbon dioxide + Water + Light → Glucose + Oxygen" : "Plants use light energy to convert carbon dioxide and water into glucose, releasing oxygen."}
+            </div>
+          </Card>
+          <Card className="p-6">
+            <h3 className="font-black">Photosynthesis vs respiration</h3>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl bg-emerald-50 p-4"><b className="text-emerald-800">Photosynthesis</b><p className="mt-1 text-sm">Stores energy in sugars and releases oxygen.</p></div>
+              <div className="rounded-xl bg-sky-50 p-4"><b className="text-sky-800">Respiration</b><p className="mt-1 text-sm">Releases usable energy from food molecules and occurs continuously in living cells.</p></div>
+            </div>
+          </Card>
+        </div>;
+      };
+
+      const Explore = () => (
+        <div className="space-y-8">
+          <SectionTitle icon="microscope" eyebrow="Module 3 · Explore" title="Open the leaf" description="Click a structure to discover what it does and why it matters for photosynthesis." />
+          <Card className="p-6">
+            <div className="relative mx-auto max-w-3xl overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-emerald-50 p-6">
+              <div className="mx-auto max-w-xl rounded-[45%] border-4 border-emerald-700 bg-emerald-100 p-5 shadow-inner">
+                <div className="rounded-[40%] border-2 border-emerald-400 bg-emerald-200 p-5">
+                  <div className="rounded-[35%] border-2 border-lime-500 bg-lime-100 p-4">
+                    <div className="grid gap-2">
+                      {Object.keys(hotspots).map((name, i) => (
+                        <button key={name} onClick={() => setModal({title:name, body:hotspots[name]})}
+                          className={`rounded-xl border px-3 py-2 text-left text-sm font-bold shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${i < 2 ? "bg-white/80" : i < 4 ? "bg-emerald-50" : "bg-lime-50"}`}>
+                          <span className="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-600" />{name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p className="mt-5 text-center text-sm text-slate-500">Simplified interactive leaf cross-section · tap any structure</p>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-xl font-black">Chloroplast Explorer</h3>
+            <p className="mt-1 text-slate-600">A simplified chloroplast model showing where key parts are located.</p>
+            <div className="mx-auto mt-6 max-w-2xl rounded-[50%] border-4 border-emerald-700 bg-emerald-100 p-8">
+              <div className="rounded-[50%] border-2 border-emerald-400 bg-emerald-50 p-6">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {["Outer Membrane","Inner Membrane","Stroma","Thylakoid","Granum","Chlorophyll"].map((x,i) =>
+                    <button key={x} onClick={() => setModal({title:x, body:({
+                      "Outer Membrane":"The outer boundary of the chloroplast.",
+                      "Inner Membrane":"The inner boundary helps separate the chloroplast interior from the cytoplasm.",
+                      "Stroma":"Fluid-filled region surrounding the thylakoid system.",
+                      "Thylakoid":"Membrane-bound compartment where light-dependent reactions occur.",
+                      "Granum":"A stack of thylakoids.",
+                      "Chlorophyll":"Pigment that absorbs light energy."
+                    })[x]})} className="rounded-xl bg-white p-3 text-sm font-bold shadow-sm hover:bg-emerald-50">{x}</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      );
+
+      const Lab = () => (
+        <div className="space-y-8">
+          <SectionTitle icon="gauge" eyebrow="Module 2 · Digital Laboratory" title="Change the environment" description="Adjust one or more factors and observe how the plant responds." />
+          <div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
+            <Card className="space-y-4 p-5">
+              <Slider label="Light Intensity" value={lab.light} setValue={v=>setLab({...lab,light:v})} icon="sun" unit="%" />
+              <Slider label="CO₂ Availability" value={lab.co2} setValue={v=>setLab({...lab,co2:v})} icon="wind" unit="%" />
+              <Slider label="Water Availability" value={lab.water} setValue={v=>setLab({...lab,water:v})} icon="droplets" unit="%" />
+              <Slider label="Temperature" value={lab.temp} setValue={v=>setLab({...lab,temp:v})} icon="activity" unit="°C" />
+              <button onClick={explainLab} className="w-full rounded-xl bg-emerald-700 px-4 py-3 font-bold text-white hover:bg-emerald-800">🧠 Explain What Happened</button>
+            </Card>
+            <Card className="overflow-hidden p-5">
+              <div className="relative flex h-64 items-end justify-center overflow-hidden rounded-2xl bg-gradient-to-b from-sky-100 to-emerald-50">
+                <div className="absolute right-6 top-5 h-16 w-16 rounded-full bg-amber-300 shadow-lg" />
+                <div className={`absolute bottom-8 h-36 w-3 rounded-full bg-amber-800 transition-all ${lab.water < 30 ? "rotate-12" : ""}`} />
+                {[0,1,2,3,4].map(i => (
+                  <div key={i} className={`absolute bottom-${20+i*6} h-14 w-24 rounded-[100%_0_100%_0] bg-emerald-${i%2 ? "500":"600"} shadow-md transition-all duration-500`}
+                    style={{ transform:`translateX(${(i-2)*28}px) rotate(${(i-2)*18}deg) scale(${0.7 + plantHealth/300})`, opacity: Math.max(.3, plantHealth/100) }} />
+                ))}
+                {Array.from({length: Math.min(18, Math.floor(labRate/5))}).map((_,i)=>
+                  <span key={i} className="absolute bottom-24 h-2.5 w-2.5 animate-bounce rounded-full bg-white shadow" style={{left:`${30+(i*17)%45}%`,animationDelay:`${i*90}ms`}}/>
+                )}
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[["Photosynthesis Rate", labRate+"%"],["Oxygen Production", Math.round(labRate*.8)+" mL/min"],["Plant Health", plantHealth+"%"],["Glucose", Math.round(labRate*.65)+" units"]].map(([a,b]) =>
+                  <div key={a} className="rounded-xl bg-slate-50 p-3"><div className="text-xs text-slate-500">{a}</div><div className="mt-1 text-xl font-black text-emerald-700">{b}</div></div>
+                )}
+              </div>
+              <div className="mt-4 h-24 rounded-xl bg-slate-50 p-3">
+                <div className="flex h-full items-end gap-1">
+                  {Array.from({length:24}).map((_,i) => <div key={i} className="flex-1 rounded-t bg-emerald-500/70" style={{height:`${Math.max(8, Math.min(100, labRate*(0.45+((i%7)/10))))}%`}}/>)}
+                </div>
+              </div>
+            </Card>
+          </div>
+          <Card className="p-5">
+            <h3 className="font-black">Advanced view</h3>
+            <p className="mt-1 text-sm text-slate-600">Optional scientific units for older students.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl bg-slate-50 p-4">Light intensity: <b>{Math.round(lab.light*10)} µmol/m²/s</b></div>
+              <div className="rounded-xl bg-slate-50 p-4">CO₂ concentration: <b>{Math.round(lab.co2*10)} ppm</b></div>
+            </div>
+          </Card>
+        </div>
+      );
+
+      const Experiments = () => (
+        <div className="space-y-8">
+          <SectionTitle icon="beaker" eyebrow="Module 5 · Experiment" title="Elodea oxygen-bubble investigation" description="Use bubble production as an observable indicator of photosynthetic activity." />
+          <div className="grid gap-5 lg:grid-cols-2">
+            <Card className="p-5">
+              <div className="relative flex h-64 items-end justify-center rounded-2xl bg-gradient-to-b from-sky-100 to-blue-50">
+                <div className="absolute bottom-5 h-44 w-52 rounded-b-[40px] border-4 border-sky-500/60 bg-sky-200/30">
+                  <div className="absolute bottom-3 left-1/2 h-36 w-3 -translate-x-1/2 rounded-full bg-emerald-700" />
+                  {Array.from({length:7}).map((_,i)=><div key={i} className="absolute h-10 w-20 rounded-[100%_0_100%_0] bg-emerald-500" style={{bottom:20+i*16,left:35+(i%2)*55,transform:`rotate(${i%2?18:-25}deg)`}}/>)}
+                  {Array.from({length:Math.min(15,experiment.bubbles)}).map((_,i)=><span key={i} className="absolute h-3 w-3 animate-bounce rounded-full bg-white shadow" style={{bottom:45+(i%5)*25,left:65+(i*29)%90}}/>)}
+                </div>
+              </div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                {["Bright","Medium","Low","Dark"].map(x => <button key={x} onClick={()=>setExperiment({...experiment,distance:x})} className={`rounded-xl border p-3 font-bold ${experiment.distance===x?"border-emerald-500 bg-emerald-50 text-emerald-800":"border-slate-200"}`}>{x}</button>)}
+                <button onClick={()=>setExperiment({...experiment,booster:!experiment.booster})} className={`rounded-xl border p-3 font-bold ${experiment.booster?"border-sky-500 bg-sky-50 text-sky-800":"border-slate-200"}`}>CO₂ Booster: {experiment.booster?"On":"Off"}</button>
+                <button onClick={()=>setExperiment({...experiment,running:!experiment.running})} className="rounded-xl bg-emerald-700 p-3 font-bold text-white">{experiment.running?"Stop":"Start"} Experiment</button>
+                <button onClick={()=>setExperiment({running:false,seconds:0,bubbles:0,distance:"Medium",booster:false})} className="rounded-xl border border-slate-200 p-3 font-bold"><LucideIcon name="rotate-ccw" className="mr-1 inline" size={16}/>Reset</button>
+                <button onClick={submitExperimentRow} className="rounded-xl bg-sky-700 p-3 font-bold text-white">Log Data</button>
+              </div>
+            </Card>
+            <Card className="p-5">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-xl bg-slate-50 p-4 text-center"><div className="text-xs text-slate-500">Stopwatch</div><div className="text-2xl font-black">{experiment.seconds}s</div></div>
+                <div className="rounded-xl bg-slate-50 p-4 text-center"><div className="text-xs text-slate-500">Bubbles</div><div className="text-2xl font-black text-sky-700">{experiment.bubbles}</div></div>
+                <div className="rounded-xl bg-slate-50 p-4 text-center"><div className="text-xs text-slate-500">Condition</div><div className="text-lg font-black">{experiment.distance}</div></div>
+              </div>
+              <div className="mt-5 overflow-auto">
+                <table className="w-full text-left text-sm"><thead><tr className="border-b text-slate-500"><th className="p-2">Condition</th><th className="p-2">Time</th><th className="p-2">Bubbles</th><th className="p-2">Observation</th></tr></thead>
+                  <tbody>{experimentRows.map((r,i)=><tr key={i} className="border-b"><td className="p-2">{r.condition}</td><td className="p-2">{r.time}</td><td className="p-2">{r.bubbles}</td><td className="p-2">{r.observation}</td></tr>)}</tbody>
+                </table>
+                {!experimentRows.length && <p className="p-6 text-center text-sm text-slate-500">Run an experiment and choose “Log Data”.</p>}
+              </div>
+            </Card>
+          </div>
+        </div>
+      );
+
+      const Tutor = () => {
+        const prompts = [
+          "What changed in the experiment?",
+          "How might that change affect the plant's ability to photosynthesize?",
+          "What does photosynthesis need from that factor?",
+          "You have enough evidence to explain what happened."
+        ];
+        return <div className="space-y-8">
+          <SectionTitle icon="brain" eyebrow="Module 6 · Tutor" title="Ask Your Photosynthesis Tutor" description="Use guiding questions to build the answer yourself." />
+          <Card className="mx-auto max-w-3xl overflow-hidden">
+            <div className="bg-emerald-950 p-6 text-white"><div className="flex items-center gap-3"><div className="rounded-xl bg-white/10 p-2"><LucideIcon name="leaf"/></div><div><h3 className="font-black">Socratic Science Tutor</h3><p className="text-sm text-emerald-200">Guidance first · answer when you're ready</p></div></div></div>
+            <div className="space-y-4 p-6">
+              <div className="rounded-2xl bg-slate-100 p-4"><b>You:</b> Why did the plant produce fewer bubbles?</div>
+              {prompts.slice(0,tutorStep+1).map((p,i)=><div key={i} className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4"><b>Tutor:</b> {p}</div>)}
+              {tutorStep < 3 ? <button onClick={()=>{setTutorStep(s=>s+1);markDone("tutor")}} className="rounded-xl bg-emerald-700 px-4 py-3 font-bold text-white">Think about this →</button> :
+                <button onClick={()=>setModal({title:"Tutor explanation",body:"Fewer bubbles indicate less oxygen being released in this simplified model. A change in light, CO₂, or another limiting factor can reduce the rate of photosynthesis."})} className="rounded-xl bg-amber-500 px-4 py-3 font-bold text-amber-950">Show Me the Explanation</button>}
+            </div>
+          </Card>
+          <div className="grid gap-4 md:grid-cols-3">
+            {[["🌱","Explain Simply","Use simple language and everyday analogies."],["🔬","Explain Scientifically","Use school-level scientific terminology."],["🧬","Explain Deeply","Explore ATP, NADPH, electron transport, and the Calvin cycle."]].map(([emoji,title,text])=><Card key={title} onClick={()=>setModal({title:`${emoji} ${title}`,body:text})} className="p-5"><div className="text-3xl">{emoji}</div><h3 className="mt-3 font-black">{title}</h3><p className="mt-1 text-sm text-slate-600">{text}</p></Card>)}
+          </div>
+        </div>;
+      };
+
+      const Challenge = () => (
+        <div className="space-y-8">
+          <SectionTitle icon="trophy" eyebrow="Module 7 · Challenge" title="Greenhouse Optimization Game" description="Adjust environmental conditions to maximize plant yield." />
+          <Card className="p-6">
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-black">Target: Optimize Yield</h3>
+                <p className="text-sm text-slate-600">Balance light, water, CO₂, and temperature for maximum efficiency.</p>
+              </div>
+              <div className="rounded-xl bg-emerald-100 px-4 py-2 font-black text-emerald-800">
+                Score: {greenhouseScore}%
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                ["Light Level", "light", ["Low", "Optimal", "Excess"]],
+                ["Water Supply", "water", ["Low", "Optimal", "Excess"]],
+                ["CO₂ Level", "co2", ["Normal", "Enriched"]],
+                ["Temperature", "temp", ["25°C Optimal", "40°C Heat Stress"]]
+              ].map(([label, key, opts]) => (
+                <div key={key} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <label className="mb-2 block text-sm font-bold text-slate-700">{label}</label>
+                  <select
+                    value={greenhouse[key]}
+                    onChange={e => setGreenhouse({ ...greenhouse, [key]: Number(e.target.value) })}
+                    className="w-full rounded-lg border border-slate-300 bg-white p-2 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    {opts.map((o, idx) => (
+                      <option key={idx} value={idx}>{o}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      );
+
+      const Assessment = () => {
+        const currentQ = questions[quizIndex];
+        return (
+          <div className="space-y-8">
+            <SectionTitle icon="circle-help" eyebrow="Module 8 · Assessment" title="Test Your Knowledge" description="Evaluate your understanding with interactive concept checks." />
+            
+            {/* Quiz Section */}
+            <Card className="p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <span className="text-sm font-bold text-emerald-700">Question {quizIndex + 1} of {questions.length}</span>
+                <span className="rounded-lg bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-800">Score: {quizScore}</span>
+              </div>
+              <h3 className="text-lg font-black text-slate-900">{currentQ.q}</h3>
+              <div className="mt-4 grid gap-3">
+                {currentQ.options.map((opt, idx) => {
+                  let btnStyle = "border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50";
+                  if (quizAnswer === idx) btnStyle = "border-emerald-600 bg-emerald-50 text-emerald-900 font-bold";
+                  if (quizSubmitted) {
+                    if (idx === currentQ.answer) btnStyle = "border-emerald-600 bg-emerald-100 text-emerald-900 font-bold";
+                    else if (quizAnswer === idx) btnStyle = "border-red-500 bg-red-50 text-red-900 font-bold";
+                  }
+                  return (
+                    <button
+                      key={opt}
+                      disabled={quizSubmitted}
+                      onClick={() => setQuizAnswer(idx)}
+                      className={`rounded-xl border p-4 text-left transition ${btnStyle}`}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {quizSubmitted && (
+                <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-700">
+                  <b className="text-slate-900">Explanation:</b> {currentQ.why}
+                </div>
+              )}
+
+              <div className="mt-6 flex justify-end gap-3">
+                {!quizSubmitted ? (
+                  <button onClick={submitQuiz} disabled={quizAnswer === null} className="rounded-xl bg-emerald-700 px-5 py-2.5 font-bold text-white disabled:opacity-50">
+                    Submit Answer
+                  </button>
+                ) : (
+                  <button onClick={nextQuiz} className="rounded-xl bg-sky-700 px-5 py-2.5 font-bold text-white">
+                    Next Question →
+                  </button>
+                )}
+              </div>
+            </Card>
+
+            {/* Misconception Buster Section */}
+            <Card className="p-6">
+              <h3 className="text-xl font-black text-slate-900">Myth vs. Fact</h3>
+              <p className="mt-1 text-sm text-slate-600">Test if you can spot common photosynthesis misconceptions.</p>
+              
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-base font-bold text-slate-800">"{myths[misconception][0]}"</p>
+                <div className="mt-4 flex gap-3">
+                  <button
+                    onClick={() => setMisconceptionAnswer(true)}
+                    className={`rounded-xl border px-4 py-2 font-bold ${misconceptionAnswer === true ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-300 bg-white text-slate-700"}`}
+                  >
+                    True
+                  </button>
+                  <button
+                    onClick={() => setMisconceptionAnswer(false)}
+                    className={`rounded-xl border px-4 py-2 font-bold ${misconceptionAnswer === false ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-300 bg-white text-slate-700"}`}
+                  >
+                    False
+                  </button>
+                </div>
+
+                {misconceptionAnswer !== null && (
+                  <div className="mt-4">
+                    <p className={`font-bold ${misconceptionAnswer === myths[misconception][1] ? "text-emerald-700" : "text-red-600"}`}>
+                      {misconceptionAnswer === myths[misconception][1] ? "Correct! ✓" : "Incorrect ✗"}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">{myths[misconception][2]}</p>
+                    <button
+                      onClick={() => { setMisconception((misconception + 1) % myths.length); setMisconceptionAnswer(null); }}
+                      className="mt-3 text-sm font-bold text-emerald-700 hover:underline"
+                    >
+                      Try Another Statement →
+                    </button>
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+        );
+      };
+
+      const Progress = () => (
+        <div className="space-y-8">
+          <SectionTitle icon="graduation-cap" eyebrow="Module 9 · Progress" title="Your Learning Portfolio" description="Track completed tasks, mastery ratings, and exported data." />
+          <div className="grid gap-5 md:grid-cols-2">
+            <Card className="p-6">
+              <h3 className="text-xl font-black text-slate-900">Completion Summary</h3>
+              <div className="mt-4 flex items-center gap-4">
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-2xl font-black text-emerald-800">
+                  {progress}%
+                </div>
+                <div>
+                  <div className="font-bold text-slate-800">{completedCount} of 12 Tasks Finished</div>
+                  <div className="text-sm text-slate-500">Keep exploring to achieve 100% mastery.</div>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-6">
+              <h3 className="text-xl font-black text-slate-900">Export Class Data</h3>
+              <p className="mt-1 text-sm text-slate-600">Download a CSV record of quiz results and experiment logs for teacher review.</p>
+              <button onClick={downloadCSV} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 font-bold text-white hover:bg-emerald-800">
+                <LucideIcon name="download" size={18} /> Download CSV Summary
+              </button>
+            </Card>
+          </div>
+        </div>
+      );
+
+      return (
+        <div className={`min-h-screen ${fontClass} ${contrast ? "bg-slate-950 text-slate-100" : "bg-slate-100 text-slate-800"}`}>
+          {/* Header */}
+          <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur-md">
+            <div className="mx-auto flex max-w-7xl items-center justify-between p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white font-black">
+                  <LucideIcon name="leaf" size={24} />
+                </div>
+                <span className="text-xl font-black tracking-tight text-slate-900">Photosynthesis<span className="text-emerald-600">Lab</span></span>
+              </div>
+
+              {/* Desktop Navigation */}
+              <nav className="hidden lg:flex items-center gap-1 rounded-2xl bg-slate-100 p-1">
+                {tabs.map(t => (
+                  <button
+                    key={t}
+                    onClick={() => go(t)}
+                    className={`rounded-xl px-3 py-1.5 text-sm font-bold transition ${tab === t ? "bg-white text-emerald-700 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </nav>
+
+              {/* Controls */}
+              <div className="flex items-center gap-2">
+                <select
+                  value={language}
+                  onChange={e => setLanguage(e.target.value)}
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-bold text-slate-700"
+                >
+                  {["English", "Tamil", "Hindi", "Malayalam", "Telugu"].map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+
+                <button
+                  onClick={() => setMobileNav(!mobileNav)}
+                  className="rounded-lg border border-slate-200 p-2 lg:hidden text-slate-700"
+                  aria-label="Toggle Menu"
+                >
+                  <LucideIcon name={mobileNav ? "x" : "menu"} size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Mobile Navigation */}
+            {mobileNav && (
+              <div className="border-t border-slate-200 bg-white p-4 lg:hidden">
+                <div className="grid grid-cols-3 gap-2">
+                  {tabs.map(t => (
+                    <button
+                      key={t}
+                      onClick={() => go(t)}
+                      className={`rounded-xl p-2 text-center text-xs font-bold ${tab === t ? "bg-emerald-100 text-emerald-800" : "bg-slate-50 text-slate-700"}`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </header>
+
+          {/* Main Content Area */}
+          <main className="mx-auto max-w-7xl p-4 md:p-8">
+            {tab === "Home" && <Home />}
+            {tab === "Learn" && <Learn />}
+            {tab === "Explore" && <Explore />}
+            {tab === "Lab" && <Lab />}
+            {tab === "Experiments" && <Experiments />}
+            {tab === "Tutor" && <Tutor />}
+            {tab === "Challenge" && <Challenge />}
+            {tab === "Assessment" && <Assessment />}
+            {tab === "Progress" && <Progress />}
+          </main>
+
+          {/* Toast Notification */}
+          {toast && (
+            <div className="fixed bottom-5 right-5 z-50 rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white shadow-2xl">
+              {toast}
+            </div>
+          )}
+
+          {/* Dialog Modal */}
+          {modal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+              <div className="max-w-md w-full rounded-2xl bg-white p-6 shadow-2xl">
+                <h3 className="text-xl font-black text-slate-900">{modal.title}</h3>
+                <p className="mt-3 text-slate-600 leading-relaxed">{modal.body}</p>
+                <button
+                  onClick={() => setModal(null)}
+                  className="mt-6 w-full rounded-xl bg-emerald-700 py-3 font-bold text-white hover:bg-emerald-800"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Render App
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<PhotosynthesisExplorer />);
+  </script>
+</body>
+</html>
